@@ -21,7 +21,7 @@ gis = GIS("https://www.arcgis.com", AGOL_USERNAME, AGOL_PASSWORD)
 SURVEY_LAYER_URL = "https://services9.arcgis.com/yF9lC2Enj2rx9gHK/arcgis/rest/services/service_eec5deb1b491460281f8492dcd8a631a/FeatureServer/0"
 layer = FeatureLayer(SURVEY_LAYER_URL, gis=gis)
 
-TEMPLATE_PATH = "template.docx"
+TEMPLATE_PATH = "CHEMICAL SAFETY Report"
 
 if not os.path.exists(TEMPLATE_PATH):
     raise Exception("template.docx not found in project root")
