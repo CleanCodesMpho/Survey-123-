@@ -33,7 +33,7 @@ layer = FeatureLayer(SURVEY_LAYER_URL, gis=gis)
 # =========================
 # TEMPLATE
 # =========================
-TEMPLATE_PATH = "CHEMICAL SAFETY Report.docx"  # change this if your file has a different name
+TEMPLATE_PATH = "CHEMICAL SAFETY Report.docx"  # change if your template has a different name
 
 if not os.path.exists(TEMPLATE_PATH):
     raise Exception(f"{TEMPLATE_PATH} not found in project root")
@@ -157,6 +157,28 @@ def generate_qr(url, path):
     img.save(path)
 
 # =========================
+# UPLOAD REPORT TO AGOL
+# =========================
+def upload_report_to_agol(file_path, objectid):
+    root_folder = gis.content.folders.get()
+
+    item_properties = {
+        "title": f"Report_{objectid}",
+        "type": "Microsoft Word",
+        "tags": ["survey123", "report", "automation"],
+        "snippet": f"Automatically generated report for Survey123 submission {objectid}"
+    }
+
+    report_item = root_folder.add(
+        item_properties=item_properties,
+        file=file_path
+    ).result()
+
+    report_item.sharing.sharing_level = "EVERYONE"
+
+    return f"https://www.arcgis.com/home/item.html?id={report_item.itemid}"
+
+# =========================
 # REPORT GENERATION
 # =========================
 def generate_report(attributes, objectid):
@@ -165,9 +187,8 @@ def generate_report(attributes, objectid):
     docx_file = os.path.join("output", f"report_{objectid}.docx")
     qr_file = os.path.join("output", f"qr_{objectid}.png")
 
-    # Temporary URL for the first render
+    # Temporary QR target for first render
     temp_url = f"https://www.arcgis.com/home/item.html?id=temp-{objectid}"
-
     generate_qr(temp_url, qr_file)
 
     edit_date = attributes.get("EditDate")
@@ -176,7 +197,6 @@ def generate_report(attributes, objectid):
     else:
         edit_date = "N/A"
 
-    # First render
     doc = DocxTemplate(TEMPLATE_PATH)
     qr_image = InlineImage(doc, qr_file, width=Mm(25))
 
@@ -191,7 +211,7 @@ def generate_report(attributes, objectid):
     doc.render(context)
     doc.save(docx_file)
 
-    # Upload the generated DOCX to AGOL
+    # Upload to AGOL and get real URL
     real_url = upload_report_to_agol(docx_file, objectid)
 
     return real_url
@@ -251,7 +271,7 @@ async def survey_webhook(request: Request):
         # STEP 4: mark query success
         update_feature(objectid, "query_ok", "queried")
 
-        # STEP 5: generate report
+        # STEP 5: generate report and upload to AGOL
         report_url = generate_report(attributes, objectid)
 
         # STEP 6: mark final success
