@@ -33,7 +33,7 @@ layer = FeatureLayer(SURVEY_LAYER_URL, gis=gis)
 # =========================
 # TEMPLATE
 # =========================
-TEMPLATE_PATH = "template.docx"  # change if your template has a different name
+TEMPLATE_PATH = "CHEMICAL SAFETY Report.docx"  # change if your template has a different name
 
 if not os.path.exists(TEMPLATE_PATH):
     raise Exception(f"{TEMPLATE_PATH} not found in project root")
