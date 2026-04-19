@@ -165,10 +165,10 @@ def generate_report(attributes, objectid):
     docx_file = os.path.join("output", f"report_{objectid}.docx")
     qr_file = os.path.join("output", f"qr_{objectid}.png")
 
-    # Placeholder for now
-    report_url = f"https://your-storage/reports/report_{objectid}.pdf"
+    # Temporary URL for the first render
+    temp_url = f"https://www.arcgis.com/home/item.html?id=temp-{objectid}"
 
-    generate_qr(report_url, qr_file)
+    generate_qr(temp_url, qr_file)
 
     edit_date = attributes.get("EditDate")
     if edit_date:
@@ -176,6 +176,7 @@ def generate_report(attributes, objectid):
     else:
         edit_date = "N/A"
 
+    # First render
     doc = DocxTemplate(TEMPLATE_PATH)
     qr_image = InlineImage(doc, qr_file, width=Mm(25))
 
@@ -190,7 +191,10 @@ def generate_report(attributes, objectid):
     doc.render(context)
     doc.save(docx_file)
 
-    return report_url
+    # Upload the generated DOCX to AGOL
+    real_url = upload_report_to_agol(docx_file, objectid)
+
+    return real_url
 
 # =========================
 # UPDATE FEATURE
