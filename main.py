@@ -14,13 +14,15 @@ from docx.shared import Mm
 app = FastAPI()
 
 # =========================
-# AGOL AUTH (RENDER SAFE)
+# AGOL AUTH (SAFE)
 # =========================
-gis = GIS(
-    "https://www.arcgis.com",
-    os.getenv("AGOL_USERNAME"),
-    os.getenv("AGOL_PASSWORD")
-)
+AGOL_USERNAME = os.getenv("AGOL_USERNAME")
+AGOL_PASSWORD = os.getenv("AGOL_PASSWORD")
+
+if not AGOL_USERNAME or not AGOL_PASSWORD:
+    raise Exception("AGOL credentials not set in environment variables")
+
+gis = GIS("https://www.arcgis.com", AGOL_USERNAME, AGOL_PASSWORD)
 
 # =========================
 # FEATURE LAYER
@@ -33,8 +35,11 @@ layer = FeatureLayer(SURVEY_LAYER_URL)
 # =========================
 TEMPLATE_PATH = "template.docx"
 
+if not os.path.exists(TEMPLATE_PATH):
+    raise Exception("template.docx not found in project root")
+
 # =========================
-# HEALTH CHECK (RENDER REQUIRED)
+# HEALTH CHECK (RENDER)
 # =========================
 @app.get("/")
 def home():
@@ -59,21 +64,28 @@ def generate_report(attributes):
     docx_file = os.path.join("output", f"report_{objectid}.docx")
     qr_file = os.path.join("output", f"qr_{objectid}.png")
 
+    # ⚠️ Placeholder (we will fix later with real storage)
     report_url = f"https://your-storage/reports/report_{objectid}.pdf"
 
     # Generate QR
     generate_qr(report_url, qr_file)
 
+    # Convert date properly
+    edit_date = attributes.get("EditDate")
+    if edit_date:
+        edit_date = datetime.fromtimestamp(edit_date / 1000).strftime("%Y-%m-%d %H:%M:%S")
+    else:
+        edit_date = "N/A"
+
     # Load template
     doc = DocxTemplate(TEMPLATE_PATH)
-
     qr_image = InlineImage(doc, qr_file, width=Mm(25))
 
     context = {
         "objectid": objectid,
         "name": attributes.get("owner_name", "N/A"),
         "location": attributes.get("Location", "N/A"),
-        "date": attributes.get("EditDate", "N/A"),
+        "date": edit_date,
         "qr_code": qr_image
     }
 
@@ -103,35 +115,39 @@ def update_feature(objectid, url, status):
 async def survey_webhook(request: Request):
 
     payload = await request.json()
-
-    print("Webhook received:", payload)  # DEBUG LOG
+    objectid = None
 
     try:
-        # SAFE OBJECTID EXTRACTION (handles Survey123 variations)
-        objectid = None
+        # Handle Survey123 payload formats
+        if "submittedRecord" in payload:
+            objectid = payload["submittedRecord"]["attributes"]["OBJECTID"]
 
-        if "feature" in payload:
-            objectid = payload["feature"]["attributes"].get("OBJECTID")
+        elif "serverResponse" in payload:
+            objectid = payload["serverResponse"]["objectId"]
 
-        elif "features" in payload:
-            objectid = payload["features"][0]["attributes"].get("OBJECTID")
-
-        if not objectid:
+        else:
             return {"status": "failed", "error": "OBJECTID not found in payload"}
 
-        # FETCH FULL FEATURE FROM AGOL
-        feature = layer.query(
+        print(f"Processing OBJECTID: {objectid}")
+
+        # Query feature safely
+        result = layer.query(
             where=f"OBJECTID={objectid}",
             out_fields="*"
-        ).features[0]
+        )
 
-        attributes = feature.attributes
+        if not result.features:
+            raise Exception(f"No feature found for OBJECTID {objectid}")
 
-        # GENERATE REPORT
+        attributes = result.features[0].attributes
+
+        # Generate report
         report_url = generate_report(attributes)
 
-        # UPDATE FEATURE LAYER
+        # Update feature layer
         update_feature(objectid, report_url, "completed")
+
+        print(f"Completed OBJECTID: {objectid}")
 
         return {
             "status": "success",
@@ -140,10 +156,5 @@ async def survey_webhook(request: Request):
         }
 
     except Exception as e:
-
-        print("ERROR:", str(e))
-
-        return {
-            "status": "failed",
-            "error": str(e)
-        }
+        print(f"FAILED OBJECTID {objectid}: {str(e)}")
+        return {"status": "failed", "error": str(e)}
