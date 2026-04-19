@@ -79,8 +79,7 @@ def update_feature(objectid, url=None, status="completed"):
         "attributes": {
             "OBJECTID": objectid,
             "report_url": url,
-            "report_status": status,
-            "last_updated": datetime.now().isoformat()
+            "report_status": status
         }
     }])
     return result
