@@ -23,6 +23,9 @@ layer = FeatureLayer(SURVEY_LAYER_URL, gis=gis)
 
 TEMPLATE_PATH = "template.docx"
 
+if not os.path.exists(TEMPLATE_PATH):
+    raise Exception("template.docx not found in project root")
+
 @app.get("/")
 def home():
     return {"status": "running"}
@@ -35,6 +38,25 @@ def debug():
         "password_set": bool(AGOL_PASSWORD),
         "layer_url": SURVEY_LAYER_URL
     }
+
+@app.get("/test-query/{objectid}")
+def test_query(objectid: int):
+    result = layer.query(where=f"OBJECTID={objectid}", out_fields="*")
+    return {
+        "found": len(result.features),
+        "attributes": result.features[0].attributes if result.features else None
+    }
+
+@app.get("/test-update/{objectid}")
+def test_update(objectid: int):
+    result = layer.edit_features(updates=[{
+        "attributes": {
+            "OBJECTID": objectid,
+            "report_status": "test_ok",
+            "report_url": "https://example.com/test.docx"
+        }
+    }])
+    return {"edit_result": result}
 
 def generate_qr(url, path):
     img = qrcode.make(url)
@@ -74,7 +96,7 @@ def generate_report(attributes):
 
     return report_url
 
-def update_feature(objectid, url=None, status="completed"):
+def update_feature(objectid, url, status):
     result = layer.edit_features(updates=[{
         "attributes": {
             "OBJECTID": objectid,
@@ -95,12 +117,11 @@ async def survey_webhook(request: Request):
         elif "serverResponse" in payload:
             objectid = payload["serverResponse"]["objectId"]
         else:
-            return {"status": "failed", "error": "OBJECTID not found in payload"}
+            return {"status": "failed", "error": "OBJECTID not found in payload", "payload": payload}
 
         result = layer.query(where=f"OBJECTID={objectid}", out_fields="*")
 
         if not result.features:
-            update_feature(objectid, None, "failed")
             return {"status": "failed", "error": f"No feature found for OBJECTID {objectid}"}
 
         attributes = result.features[0].attributes
@@ -117,12 +138,6 @@ async def survey_webhook(request: Request):
         }
 
     except Exception as e:
-        if objectid is not None:
-            try:
-                update_feature(objectid, None, "failed")
-            except Exception:
-                pass
-
         return {
             "status": "failed",
             "objectid": objectid,
